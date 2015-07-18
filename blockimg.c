@@ -1,14 +1,22 @@
+#define _POSIX_C_SOURCE 2
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
-#define pw 4 // aspect ratio of tty characters
-#define ph 7
-#define max_rows 40
-#define max_cols 80
+#include <string.h>
 #define max2(__A__, __B__) ((__A__)>=(__B__)?(__A__):(__B__))
 #define max3(__A__, __B__, __C__) max2(__A__, max2(__B__, __C__))
 #define min2(__A__, __B__) ((__A__)<(__B__)?(__A__):(__B__))
 #define min3(__A__, __B__, __C__) min2(__A__, min2(__B__, __C__))
+
+#ifndef TPUT
+#pragma message "no tput command path defined in TPUT, 15 rows and 60 cols will be the default instead"
+#endif
+#ifndef GRAPHICSMAGICK
+#pragma message "no gm command path defined in GRAPHICSMAGICK, only pgm (for -b and -g) and ppm (for -a and -m) formats will be accepted"
+#define PFCLOSE(x) fclose(x)
+#else
+#define PFCLOSE(x) pclose(x)
+#endif
 
 static inline void ignorewhitespace(FILE *f) { /*{{{*/
 	int c = 0;
@@ -59,7 +67,7 @@ int simple_hs (const int *rgb) { /*{{{*/
 		float delta = cmax-cmin;
 		float saturation = delta/cmax;
 		float hue = 0;
-		if (saturation < 0.125f) {
+		if (saturation < 0.25f) {
 			return -1;
 		}
 		switch (bin) {
@@ -88,9 +96,7 @@ int simple_hs (const int *rgb) { /*{{{*/
 		if (hue < 270) { return 4; }
 		if (hue < 330) { return 5; }
 	}
-	else {
-		return -1;
-	}
+	return -1;
 } /*}}}*/
 void print_2x2_bitmap(FILE *fh, char bmp) { /*{{{*/
 	if (bmp == 0) {
@@ -124,59 +130,60 @@ void print_gray_pixel(FILE *fh, int value) { /*{{{*/
 		}
 	}
 } /*}}}*/
-void print_hs(FILE *fh, int hs) { /*{{{*/
-#ifdef MIRC
-	if (hs >= 0) { fputc(3,fh); }
-	switch (hs) { /*{{{*/
-		case 0: // red
-			fputs("4", fh);
-			break;
-		case 1: // yellow
-			fputs("8", fh);
-			break;
-		case 2: // green
-			fputs("9", fh);
-			break;
-		case 3: // cyan
-			fputs("11", fh);
-			break;
-		case 4: // blue
-			fputs("12", fh);
-			break;
-		case 5: // magenta
-			fputs("13", fh);
-			break;
-		default: // reset
-			fputc(15, fh);
-			break;
-	} /*}}}*/
-#else
-	switch (hs) { /*{{{*/
-		case 0: // red
-			fputs("\x1b[31m", fh);
-			break;
-		case 1: // yellow
-			fputs("\x1b[33m", fh);
-			break;
-		case 2: // green
-			fputs("\x1b[32m", fh);
-			break;
-		case 3: // cyan
-			fputs("\x1b[36m", fh);
-			break;
-		case 4: // blue
-			fputs("\x1b[34m", fh);
-			break;
-		case 5: // magenta
-			fputs("\x1b[35m", fh);
-			break;
-		default: // reset
-			fputs("\x1b[0m", fh);
-			break;
-	} /*}}}*/
-#endif
+void print_hs(FILE *fh, int hs, int submode) { /*{{{*/
+	if (submode) { // mirc
+		if (hs >= 0) { fputc(3,fh); }
+		switch (hs) { /*{{{*/
+			case 0: // red
+				fputs("4", fh);
+				break;
+			case 1: // yellow
+				fputs("8", fh);
+				break;
+			case 2: // green
+				fputs("9", fh);
+				break;
+			case 3: // cyan
+				fputs("11", fh);
+				break;
+			case 4: // blue
+				fputs("12", fh);
+				break;
+			case 5: // magenta
+				fputs("13", fh);
+				break;
+			default: // reset
+				fputc(15, fh);
+				break;
+		} /*}}}*/
+	}
+	else { // ansi
+		switch (hs) { /*{{{*/
+			case 0: // red
+				fputs("\x1b[31m", fh);
+				break;
+			case 1: // yellow
+				fputs("\x1b[33m", fh);
+				break;
+			case 2: // green
+				fputs("\x1b[32m", fh);
+				break;
+			case 3: // cyan
+				fputs("\x1b[36m", fh);
+				break;
+			case 4: // blue
+				fputs("\x1b[34m", fh);
+				break;
+			case 5: // magenta
+				fputs("\x1b[35m", fh);
+				break;
+			default: // reset
+				fputs("\x1b[0m", fh);
+				break;
+		} /*}}}*/
+	}
 } /*}}}*/
-void output_bitmap(const unsigned char *image, int w, int h) { /*{{{*/
+void output_bitmap(const unsigned char *image, int w, int h, int pw, int ph) { /*{{{*/
 	for (int row=0; row<h/ph/2; ++row) {
 		for (int col=0; col<w/pw/2; ++col) {
 			char bitmap_char = 0;
@@ -200,7 +207,7 @@ void output_bitmap(const unsigned char *image, int w, int h) { /*{{{*/
 		fputc('\n', stdout);
 	}
 } /*}}}*/
-void output_graymap(const unsigned char *image, int w, int h) { /*{{{*/
+void output_graymap(const unsigned char *image, int w, int h, int pw, int ph) { /*{{{*/
 	for (int row=0; row<h/ph; ++row) {
 		for (int col=0; col<w/pw; ++col) {
 			int acc = 0;
@@ -216,7 +223,7 @@ void output_graymap(const unsigned char *image, int w, int h) { /*{{{*/
 		fputc('\n', stdout);
 	}
 } /*}}}*/
-void output_rgbmap(const unsigned char *image, int w, int h) { /*{{{*/
+void output_rgbmap(const unsigned char *image, int w, int h, int pw, int ph, int submode) { /*{{{*/
 	for (int row=0; row<h/ph; ++row) {
 		int ohs = -1;
 		for (int col=0; col<w/pw; ++col) {
@@ -235,65 +242,181 @@ void output_rgbmap(const unsigned char *image, int w, int h) { /*{{{*/
 			int hs = simple_hs(acc);
 			int gac = (acc[0]+acc[1]+acc[2])/3;
 			if (ohs != hs) {
-				print_hs(stdout, hs);
+				print_hs(stdout, hs, submode);
 				ohs = hs;
 			}
 			print_gray_pixel(stdout, gac/pw/ph);
 		}
-#ifndef MIRC
-		print_hs(stdout, -1);
-#endif
+		if (submode == 0) {
+			print_hs(stdout, -1, submode);
+		}
 		fputc('\n', stdout);
 	}
 } /*}}}*/
-int main(int argc, const char **argv) {
+int main(int argc, const char **argv) { /*{{{*/
 
-	if (argc != 3) {
-		return 0;
-	}
-
+	const char *infile = NULL;
 	int mode = 0;
-	if (argv[1][0] == 'g') {
-		mode = 1;
-	}
-	else if (argv[1][0] == 'c') {
-		mode = 2;
-	}
+	int pw = 1;
+	int ph = 2;
+	int max_rows = 0;
+	int max_cols = 0;
 
+	// command line parsing
+	for (int i=1; i<argc; ++i) { /*{{{*/
+		if (argv[i][0] == '-') {
+			int j = i;
+			for (int k=1; argv[i][k] != '\0'; ++k) {
+				switch (argv[i][k]) {
+					case 'b': // bitmap
+						mode = 0;
+						break;
+					case 'g': // graymap
+						mode = 1;
+						break;
+					case 'a': // ansi escape color
+						mode = 2;
+						break;
+					case 'm': // mirc escape color
+						mode = 3;
+						break;
+					case 's': // size
+						if (argc <= j+2) { goto bad_command_line; }
+						max_cols = atoi(argv[++j]);
+						max_rows = atoi(argv[++j]);
+						break;
+					case 'p': // pixel aspect ratio
+						if (argc <= j+2) { goto bad_command_line; }
+						pw = atoi(argv[++j]);
+						ph = atoi(argv[++j]);
+						break;
+					case 'f': // explicitly specify file
+						if (argc <= j+1) { goto bad_command_line; }
+						if (infile == NULL) {
+							infile = argv[++j];
+						}
+						break;
+				}
+			}
+			i = j;
+		}
+		else if (infile == NULL) {
+			infile = argv[i];
+		}
+	} /*}}}*/
+
+	// help text
+	if (infile == NULL || pw <= 0 || ph <= 0) { /*{{{*/
+		bad_command_line:
+		fprintf(stderr,
+			"%s [parameters] file\n" \
+			"\t-b -g -a -m determines if the output is going to be in\n" \
+			"\t            monochrome, gray, ansi escape or mirc escape colors\n" \
+			"\t-s W H      determines the max dimensions (cols and rows)\n" \
+			"\t            of the output, if not specified, %s is used\n" \
+			"\t-p W H      determines the character aspect ratio, since pixels\n" \
+			"\t            are usually squares, but terminal characters are not\n" \
+			"\t            if not specified, default values 2 1 are used\n" \
+			"\t-f FILE     explicitly specify file to read from\n" \
+			"\n" \
+			"parameters can be joined, eg %s -cs 80 25 SOMEFILE\n" \
+			"or even %s -fsap SOMEFILE 100 30 3 7\n" \
+			"\n" \
+			"bitmap mode is drawn with space, and unicode characters\n" \
+			"2580, 2588, 258C, 2590, and 2596-259F (hexadecimal)\n" \
+			"gray and color mode is drawn with space, and unicode characters\n" \
+			"2588, 2591-2593 (hexadecimal)\n%s",
+			argv[0],
+#ifdef TPUT
+			"info from tput(1)",
+#else
+			"60 cols x 15 rows",
+#endif
+			argv[0], argv[0],
+#ifndef GRAPHICSMAGICK
+			"\n"
+			"COMPILED TO NOT USE GRAPHICSMAGICK, that means that only binary pgm 'P5'\n" \
+			"(for -b and -g) and ppm 'P6' (for -a and -m) is accepted\n"
+#else
+			""
+#endif
+		);
+		return 1;
+	} /*}}}*/
 	int ppc = mode == 0 ? 2 : 1; // bitmap mode can cram more pixels per char
 	int psz = mode == 2 ? 3 : 1; // color mode needs three bytes per pixel
+	FILE *fh = NULL;
 
+#ifdef TPUT
+	// get terminal size
+	if (max_rows <= 0 || max_cols <= 0) { /*{{{*/
+		fh = popen(TPUT " lines", "r");
+		fscanf(fh, "%d", &max_rows);
+		pclose(fh);
+		fh = popen(TPUT " cols", "r");
+		fscanf(fh, "%d", &max_cols);
+		pclose(fh);
+	} /*}}}*/
+#else
+	// or use these defaults
+	max_cols = 60;
+	max_rows = 15;
+#endif
+
+#ifdef GRAPHICSMAGICK
 	int image_max_w = max_cols*pw*ppc;
 	int image_max_h = max_rows*ph*ppc;
+	int ifnlen = strlen(infile);
+	char *cmdline = malloc(sizeof(char)*(1024 + ifnlen));
+	if (cmdline == NULL) { /*{{{*/
+		return -1;
+	} /*}}}*/
+	snprintf(cmdline, 1024+ifnlen, GRAPHICSMAGICK " convert %s -resize %dx%d p%cm:-", infile, image_max_w, image_max_h, mode==2?'p':'g');
+	fh = popen(cmdline, "r");
+	free(cmdline);
+#else
+	fh = fopen(infile, "r");
+#endif
 
-	const char *infile = argv[2];
-	char cmdline[1024];
-
-	sprintf(cmdline, "/usr/bin/gm convert %s -resize %dx%d p%cm:output%d", infile, image_max_w, image_max_h, mode==2?'p':'g', mode);
-	system(cmdline);
-	sprintf(cmdline, "/usr/bin/gm convert %s -resize %dx%d p%cm:-", infile, image_max_w, image_max_h, mode==2?'p':'g');
-	FILE *fh = popen(cmdline, "r");
+	unsigned char magic[2];
 	int image_w;
 	int image_h;
-	fscanf(fh, "%*2c"); ignorewhitespace(fh); ignorecomment(fh);
+	fscanf(fh, "%2c", magic); ignorewhitespace(fh); ignorecomment(fh);
+	if (magic[0] != 0x50 || magic[1] != (mode==2?0x36:0x35)) {
+		fprintf(stderr, "wrong image magic '%02x%02x': only binary pgm '5035' (for -b and -g) and ppm '5036' (for -a and -m) is accepted\n", magic[0], magic[1]);
+		PFCLOSE(fh);
+		return 1;
+	}
 	fscanf(fh, "%d", &image_w); ignorewhitespace(fh); ignorecomment(fh);
 	fscanf(fh, "%d", &image_h); ignorewhitespace(fh); ignorecomment(fh);
 	fscanf(fh, "%*d%*c");
-
 	unsigned char *image = malloc(sizeof(unsigned char)*image_w*image_h*psz);
+	if (image == NULL) { /*{{{*/
+		PFCLOSE(fh);
+		return -1;
+	} /*}}}*/
 	fread(image, sizeof(unsigned char), image_w*image_h*psz, fh);
-	pclose(fh);
-
-	if (mode == 0) {
-		output_bitmap(image, image_w, image_h);
+	PFCLOSE(fh);
+#ifndef GRAPHICSMAGICK
+	int multiplier = 1;
+	while (image_w > max_cols*pw*ppc*multiplier || image_h > max_rows*ph*ppc*multiplier) {
+		++multiplier;
+	}
+	printf("%d x %d -[ %d ]-> ", pw, ph, multiplier);
+	pw *= multiplier;
+	ph *= multiplier;
+	printf("%d x %d\n", pw, ph);
+#endif
+	// print image output
+	if (mode == 0) { /*{{{*/
+		output_bitmap(image, image_w, image_h, pw, ph);
 	}
 	else if (mode == 1) {
-		output_graymap(image, image_w, image_h);
+		output_graymap(image, image_w, image_h, pw, ph);
 	}
 	else {
-		output_rgbmap(image, image_w, image_h);
-	}
-
+		output_rgbmap(image, image_w, image_h, pw, ph, mode-2);
+	} /*}}}*/
 	free(image);
 	return 0;
-}
+} /*}}}*/

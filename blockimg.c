@@ -24,15 +24,20 @@
 #define CM_ANSI 0
 #define CM_MIRC 4
 
-#define INVERTGRAYS 8
+#define INVERT 8
 
-#define GETMODE (3)
-#define GETCMODE (4)
-#define GETINVERT (8)
+#define NOUNICODE 0
+#define USEUNICODE 16
+
+#define GETMODE 3
+#define GETCMODE 4
+#define GETINVERT 8
+#define GETUNICODE 16
 
 #define SETMODE (~3)
 #define SETCMODE (~4)
 #define SETINVERT (~8)
+#define SETUNICODE (~16)
 
 static inline void ignorewhitespace(FILE *f) { /*{{{*/
 	int c = 0;
@@ -117,41 +122,66 @@ int simple_hs (const int *rgb) { /*{{{*/
 	}
 	return -1;
 } /*}}}*/
-void print_2x2_bitmap(FILE *fh, unsigned char bmp) { /*{{{*/
+void print_2x2_bitmap(FILE *fh, unsigned char bmp, int useunicode) { /*{{{*/
 	bmp &= 15;
 	if (bmp == 0) {
 		fputc(0x20, fh);
 	}
 	else {
-		int possible[15] = {0x98,0x9d,0x80,0x96,0x8c,0x9e,0x9b,0x97,0x9a,0x90,0x9c,0x84,0x99,0x9f,0x88};
-		fputc(0xe2, fh);
-		fputc(0x96, fh);
-		fputc(possible[bmp-1], fh);
+		if (useunicode == 0) {
+			char possible[16] = "'`\",[/P.\\]?_LJ#";
+			fputc(possible[bmp-1], fh);
+		}
+		else {
+			int possible[15] = {0x98,0x9d,0x80,0x96,0x8c,0x9e,0x9b,0x97,0x9a,0x90,0x9c,0x84,0x99,0x9f,0x88};
+			fputc(0xe2, fh);
+			fputc(0x96, fh);
+			fputc(possible[bmp-1], fh);
+		}
 	}
 } /*}}}*/
-void print_gray_pixel(FILE *fh, int value) { /*{{{*/
+void print_gray_pixel(FILE *fh, int value, int useunicode) { /*{{{*/
 	if (value < 51) {
 		fputc(0x20, fh);
 	}
 	else {
-		fputc(0xe2, fh);
-		fputc(0x96, fh);
-		if (value < 102) {
-			fputc(0x91, fh);
-		}
-		else if (value < 153) {
-			fputc(0x92, fh);
-		}
-		else if (value < 204) {
-			fputc(0x93, fh);
-		}
-		else {
-			fputc(0x88, fh);
-		}
+		if (useunicode == 0) { /*{{{*/
+			if (value < 51) {
+				fputc(' ', fh);
+			}
+			else if (value < 102) {
+				fputc('.', fh);
+			}
+			else if (value < 153) {
+				fputc('+', fh);
+			}
+			else if (value < 204) {
+				fputc('o', fh);
+			}
+			else {
+				fputc('#', fh);
+			}
+		} /*}}}*/
+		else { /*{{{*/
+			fputc(0xe2, fh);
+			fputc(0x96, fh);
+			if (value < 102) {
+				fputc(0x91, fh);
+			}
+			else if (value < 153) {
+				fputc(0x92, fh);
+			}
+			else if (value < 204) {
+				fputc(0x93, fh);
+			}
+			else {
+				fputc(0x88, fh);
+			}
+		} /*}}}*/
 	}
 } /*}}}*/
-void print_hs(FILE *fh, int hs, int submode) { /*{{{*/
-	if (submode) { // mirc
+void print_hs(FILE *fh, int hs, int colormode) { /*{{{*/
+	if (colormode) { // mirc
 		if (hs >= 0) { fputc(3,fh); }
 		switch (hs) { /*{{{*/
 			case 0: // red
@@ -203,7 +233,7 @@ void print_hs(FILE *fh, int hs, int submode) { /*{{{*/
 		} /*}}}*/
 	}
 } /*}}}*/
-void output_bitmap(const unsigned char *image, int w, int h, int pw, int ph, int invertgrays) { /*{{{*/
+void output_bitmap(const unsigned char *image, int w, int h, int pw, int ph, int mode) { /*{{{*/
 	for (int row=0; row<h/ph/2; ++row) {
 		for (int col=0; col<w/pw/2; ++col) {
 			unsigned char bitmap_char = 0;
@@ -222,15 +252,15 @@ void output_bitmap(const unsigned char *image, int w, int h, int pw, int ph, int
 					}
 				}
 			}
-			if (invertgrays != 0) {
+			if ((mode & GETINVERT) == INVERT) {
 				bitmap_char = ~bitmap_char;
 			}
-			print_2x2_bitmap(stdout, bitmap_char);
+			print_2x2_bitmap(stdout, bitmap_char, (mode & GETUNICODE));
 		}
 		fputc('\n', stdout);
 	}
 } /*}}}*/
-void output_graymap(const unsigned char *image, int w, int h, int pw, int ph, int invertgrays) { /*{{{*/
+void output_graymap(const unsigned char *image, int w, int h, int pw, int ph, int mode) { /*{{{*/
 	for (int row=0; row<h/ph; ++row) {
 		for (int col=0; col<w/pw; ++col) {
 			int acc = 0;
@@ -241,17 +271,17 @@ void output_graymap(const unsigned char *image, int w, int h, int pw, int ph, in
 					acc += get_gray_pixel(image, x, y, w, h);
 				}
 			} /*}}}*/
-			if (invertgrays != 0) {
-				print_gray_pixel(stdout, 255-acc/pw/ph);
+			if ((mode & GETINVERT) == INVERT) {
+				print_gray_pixel(stdout, 255-acc/pw/ph, (mode & GETUNICODE));
 			}
 			else {
-				print_gray_pixel(stdout, acc/pw/ph);
+				print_gray_pixel(stdout, acc/pw/ph, (mode & GETUNICODE));
 			}
 		}
 		fputc('\n', stdout);
 	}
 } /*}}}*/
-void output_rgbmap(const unsigned char *image, int w, int h, int pw, int ph, int colormode, int invertgrays) { /*{{{*/
+void output_rgbmap(const unsigned char *image, int w, int h, int pw, int ph, int mode) { /*{{{*/
 	for (int row=0; row<h/ph; ++row) {
 		int ohs = -1;
 		for (int col=0; col<w/pw; ++col) {
@@ -269,18 +299,18 @@ void output_rgbmap(const unsigned char *image, int w, int h, int pw, int ph, int
 			int hs = simple_hs(acc);
 			int gac = (acc[0]+acc[1]+acc[2])/3;
 			if (ohs != hs) {
-				print_hs(stdout, hs, colormode);
+				print_hs(stdout, hs, mode & GETCMODE);
 				ohs = hs;
 			}
-			if (invertgrays != 0) {
-				print_gray_pixel(stdout, 255-gac);
+			if ((mode & GETINVERT) == INVERT) {
+				print_gray_pixel(stdout, 255-gac, mode & GETUNICODE);
 			}
 			else {
-				print_gray_pixel(stdout, gac);
+				print_gray_pixel(stdout, gac, mode & GETUNICODE);
 			}
 		}
-		if (colormode == 0) {
-			print_hs(stdout, -1, colormode);
+		if ((mode & GETCMODE) == CM_ANSI) {
+			print_hs(stdout, -1, mode & GETCMODE);
 		}
 		fputc('\n', stdout);
 	}
@@ -288,7 +318,7 @@ void output_rgbmap(const unsigned char *image, int w, int h, int pw, int ph, int
 int main(int argc, const char **argv) { /*{{{*/
 
 	const char *infile = NULL;
-	int mode = 0;
+	int mode = BITMAP | USEUNICODE;
 	int pw = 1;
 	int ph = 2;
 	int max_rows = 0;
@@ -313,7 +343,10 @@ int main(int argc, const char **argv) { /*{{{*/
 						mode = (mode & SETMODE & SETCMODE) | COLOR | CM_MIRC;
 						break;
 					case 'i': // invert gray pixels
-						mode = (mode & SETINVERT) | INVERTGRAYS;
+						mode = (mode & SETINVERT) | INVERT;
+						break;
+					case 'n': // no unicode
+						mode = (mode & SETUNICODE) | NOUNICODE;
 						break;
 					case 's': // size
 						if (argc <= j+2) { goto bad_command_line; }
@@ -344,25 +377,28 @@ int main(int argc, const char **argv) { /*{{{*/
 	if (infile == NULL || pw <= 0 || ph <= 0) { /*{{{*/
 		bad_command_line:
 		fprintf(stderr,
-			"%s [parameters] file\n" \
-			"\t-b -g -a -m determines if the output is going to be in\n" \
-			"\t            monochrome, gray, ansi escape or mirc escape colors\n" \
+			"%s [parameters] file\n"
+			"\t-b -g -a -m determines if the output is going to be in\n"
+			"\t            monochrome, gray, ansi escape or mirc escape colors\n"
 			"\t-i          invert gray level of pixels (though not hue), suitable for\n"\
-			"\t            dark on bright text media, probably works best with -b or -g\n" \
-			"\t-s W H      determines the max dimensions (cols and rows)\n" \
-			"\t            of the output, if not specified, %s is used\n" \
-			"\t-p W H      determines the character aspect ratio, since pixels\n" \
-			"\t            are usually squares, but terminal characters are not\n" \
-			"\t            if not specified, default values 2 1 are used\n" \
-			"\t-f FILE     explicitly specify file to read from\n" \
-			"\n" \
-			"parameters can be joined, eg %s -cs 80 25 SOMEFILE\n" \
-			"or even %s -fsap SOMEFILE 100 30 3 7\n" \
-			"\n" \
-			"bitmap mode is drawn with space, and unicode characters\n" \
-			"2580, 2588, 258C, 2590, and 2596-259F (hexadecimal)\n" \
-			"gray and color mode is drawn with space, and unicode characters\n" \
-			"2588, 2591-2593 (hexadecimal)\n%s",
+			"\t            dark on bright text media, probably works best with -b or -g\n"
+			"\t-n          do not use unicode\n"
+			"\t-s W H      determines the max dimensions (cols and rows)\n"
+			"\t            of the output, if not specified, %s is used\n"
+			"\t-p W H      determines the character aspect ratio, since pixels\n"
+			"\t            are usually squares, but terminal characters are not\n"
+			"\t            if not specified, default values 2 1 are used\n"
+			"\t-f FILE     explicitly specify file to read from\n"
+			"\n"
+			"parameters can be joined, eg %s -cs 80 25 SOMEFILE\n"
+			"or even %s -fsap SOMEFILE 100 30 3 7\n"
+			"\n"
+			"Unless -n is specified, bitmap mode is drawn with space and unicode characters\n"
+			"2580, 2588, 258C, 2590, and 2596-259F (hexadecimal).\n"
+			"Gray and color mode is drawn with space, and unicode characters\n"
+			"2588, 2591-2593 (hexadecimal).\n"
+			"If -n is specified, bitmap mode is drawn with space, and '`\",[/P.\\]?_LJ#\n"
+			"and gray and color mode is drawn with space, and .+o#.\n%s",
 			argv[0],
 #ifdef TPUT
 			"info from tput(1)",
@@ -372,7 +408,7 @@ int main(int argc, const char **argv) { /*{{{*/
 			argv[0], argv[0],
 #ifndef GRAPHICSMAGICK
 			"\n"
-			"COMPILED TO NOT USE GRAPHICSMAGICK, that means that only binary pgm 'P5'\n" \
+			"COMPILED TO NOT USE GRAPHICSMAGICK, that means that only binary pgm 'P5'\n"
 			"(for -b and -g) and ppm 'P6' (for -a and -m) is accepted\n"
 #else
 			""
@@ -455,13 +491,13 @@ int main(int argc, const char **argv) { /*{{{*/
 #endif
 	// print image output
 	if ((mode & GETMODE) == BITMAP) { /*{{{*/
-		output_bitmap(image, image_w, image_h, pw, ph, mode & GETINVERT);
+		output_bitmap(image, image_w, image_h, pw, ph, mode);
 	}
 	else if ((mode & GETMODE) == GRAY) {
-		output_graymap(image, image_w, image_h, pw, ph, mode & GETINVERT);
+		output_graymap(image, image_w, image_h, pw, ph, mode);
 	}
 	else {
-		output_rgbmap(image, image_w, image_h, pw, ph, mode & GETCMODE, mode & GETINVERT);
+		output_rgbmap(image, image_w, image_h, pw, ph, mode);
 	} /*}}}*/
 	free(image);
 	return 0;

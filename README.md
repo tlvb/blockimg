@@ -10,6 +10,7 @@ the wrong parameters.
     	            monochrome, gray, ansi escape or mirc escape colors
     	-i          invert gray level of pixels (though not hue), suitable for
     	            dark on bright text media, probably works best with -b or -g
+    	-n          do not use unicode
     	-s W H      determines the max dimensions (cols and rows)
     	            of the output, if not specified, info from tput(1) is used
     	-p W H      determines the character aspect ratio, since pixels
@@ -18,12 +19,14 @@ the wrong parameters.
     	-f FILE     explicitly specify file to read from
     
     parameters can be joined, eg ./blockimg -cs 80 25 SOMEFILE
-    or even ./blockimg -fsap SOMEFILE 100 30 3 7
+    or even ./blockimg -fsapn SOMEFILE 100 30 3 7
     
-    bitmap mode is drawn with space, and unicode characters
-    2580, 2588, 258C, 2590, and 2596-259F (hexadecimal)
-    gray and color mode is drawn with space, and unicode characters
-    2588, 2591-2593 (hexadecimal)
+    Unless -n is specified, bitmap mode is drawn with space and unicode characters
+    2580, 2588, 258C, 2590, and 2596-259F (hexadecimal).
+    Gray and color mode is drawn with space, and unicode characters
+    2588, 2591-2593 (hexadecimal).
+    If -n is specified, bitmap mode is drawn with space, and '`",[/P.\]?_LJ#
+    and gray and color mode is drawn with space, and .+o#.
 
 # Example use
     user@host~$ ./blockimg fiiiish.png -gis 87 50

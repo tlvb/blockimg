@@ -8,8 +8,8 @@ the wrong parameters.
     ./blockimg [parameters] file
     	-b -g -a -m determines if the output is going to be in
     	            monochrome, gray, ansi escape or mirc escape colors
-    	-i          invert gray pixels (though not hue), suitable for dark
-    	            on bright text media, probably works best with -b or -g
+    	-i          invert gray level of pixels (though not hue), suitable for
+    	            dark on bright text media, probably works best with -b or -g
     	-s W H      determines the max dimensions (cols and rows)
     	            of the output, if not specified, info from tput(1) is used
     	-p W H      determines the character aspect ratio, since pixels

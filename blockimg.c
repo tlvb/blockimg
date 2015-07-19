@@ -347,8 +347,8 @@ int main(int argc, const char **argv) { /*{{{*/
 			"%s [parameters] file\n" \
 			"\t-b -g -a -m determines if the output is going to be in\n" \
 			"\t            monochrome, gray, ansi escape or mirc escape colors\n" \
-			"\t-i          invert gray pixels (though not hue), suitable for dark\n"\
-			"\t            on bright text media, probably works best with -b or -g\n" \
+			"\t-i          invert gray level of pixels (though not hue), suitable for\n"\
+			"\t            dark on bright text media, probably works best with -b or -g\n" \
 			"\t-s W H      determines the max dimensions (cols and rows)\n" \
 			"\t            of the output, if not specified, %s is used\n" \
 			"\t-p W H      determines the character aspect ratio, since pixels\n" \
